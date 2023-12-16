@@ -55,10 +55,20 @@ class BigQueryCursor(HarlequinCursor):
         if not self.cursor.description:
             raise TypeError("Cursor has no description")
 
+        if not self.cursor.query_job:
+            raise TypeError("Cursor has no query job")
+
+        result_schema = self.cursor.query_job.result().schema
         fields = []
-        for field in self.cursor.description:
-            field_type = StandardSqlTypeNames(field.type_code)
-            fields.append((field.name, COLUMN_TYPE_MAPPING[field_type]))
+        # Cursor.description is undocumented but exactly what we need
+        for field in result_schema:
+            # TODO: Make DRY
+            standard_sql_field = field.to_standard_sql()
+            if not standard_sql_field.type or not standard_sql_field.type.type_kind:
+                type_label = "?"  # Type is unspecified
+            else:
+                type_label = COLUMN_TYPE_MAPPING[standard_sql_field.type.type_kind]
+            fields.append((field.name, type_label))
 
         return fields
 
