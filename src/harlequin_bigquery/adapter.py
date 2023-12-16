@@ -4,6 +4,7 @@ from typing import Any, Sequence
 
 from google.cloud import bigquery
 from google.cloud.bigquery.dataset import DatasetListItem
+from google.cloud.bigquery.dbapi import Cursor as BigQueryDbApiCursor
 from google.cloud.bigquery.enums import StandardSqlTypeNames
 from google.cloud.bigquery.schema import SchemaField
 from google.cloud.bigquery.table import TableListItem
@@ -18,19 +19,48 @@ from harlequin.exception import HarlequinConnectionError, HarlequinQueryError
 from textual_fastdatatable.backend import AutoBackendType
 
 from harlequin_bigquery.cli_options import BIGQUERY_ADAPTER_OPTIONS
-from harlequin_bigquery.keywords import RESERVED_KEYWORDS
 from harlequin_bigquery.functions import BUILTIN_FUNCTIONS
+from harlequin_bigquery.keywords import RESERVED_KEYWORDS
+
+# Abbreviations for column types
+# TODO: Write a test that we have all types mapped
+COLUMN_TYPE_MAPPING = {
+    StandardSqlTypeNames.TYPE_KIND_UNSPECIFIED: "?",
+    StandardSqlTypeNames.INT64: "#",
+    StandardSqlTypeNames.BOOL: "t/f",
+    StandardSqlTypeNames.FLOAT64: "#.#",
+    StandardSqlTypeNames.STRING: "s",
+    StandardSqlTypeNames.BYTES: "0b",
+    StandardSqlTypeNames.TIMESTAMP: "ts",
+    StandardSqlTypeNames.DATE: "d",
+    StandardSqlTypeNames.TIME: "t",
+    StandardSqlTypeNames.DATETIME: "dt",
+    StandardSqlTypeNames.INTERVAL: "|-|",
+    StandardSqlTypeNames.GEOGRAPHY: "geo",
+    StandardSqlTypeNames.NUMERIC: "#.#",
+    StandardSqlTypeNames.BIGNUMERIC: "#.#",
+    StandardSqlTypeNames.JSON: "{j}",
+    StandardSqlTypeNames.ARRAY: "[]",
+    StandardSqlTypeNames.STRUCT: "{}",
+}
 
 
 class BigQueryCursor(HarlequinCursor):
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        self.cur = args[0]
+    def __init__(self, cursor: BigQueryDbApiCursor, *args: Any, **kwargs: Any) -> None:
+        self.cursor = cursor
         self._limit: int | None = None
 
     def columns(self) -> list[tuple[str, str]]:
-        names = self.cur.column_names
-        types = self.cur.column_types
-        return list(zip(names, types))
+        # TODO: Handle this case better
+        if not self.cursor.description:
+            raise TypeError("Cursor has no description")
+
+        fields = []
+        for field in self.cursor.description:
+            field_type = StandardSqlTypeNames(field.type_code)
+            fields.append((field.name, COLUMN_TYPE_MAPPING[field_type]))
+
+        return fields
 
     def set_limit(self, limit: int) -> BigQueryCursor:
         self._limit = limit
@@ -39,9 +69,9 @@ class BigQueryCursor(HarlequinCursor):
     def fetchall(self) -> AutoBackendType:
         try:
             if self._limit is None:
-                return self.cur.fetchall()
+                return self.cursor.fetchall()
             else:
-                return self.cur.fetchmany(self._limit)
+                return self.cursor.fetchmany(self._limit)
         except Exception as e:
             raise HarlequinQueryError(
                 msg=str(e),
@@ -57,32 +87,12 @@ class BigQueryConnection(HarlequinConnection):
         "EXTERNAL": "ext",
     }
 
-    # Abbreviations for column types
-    # TODO: Write a test that we have all types mapped
-    COLUMN_TYPE_MAPPING = {
-        StandardSqlTypeNames.TYPE_KIND_UNSPECIFIED: "?",
-        StandardSqlTypeNames.INT64: "#",
-        StandardSqlTypeNames.BOOL: "t/f",
-        StandardSqlTypeNames.FLOAT64: "#.#",
-        StandardSqlTypeNames.STRING: "s",
-        StandardSqlTypeNames.BYTES: "0b",
-        StandardSqlTypeNames.TIMESTAMP: "ts",
-        StandardSqlTypeNames.DATE: "d",
-        StandardSqlTypeNames.TIME: "t",
-        StandardSqlTypeNames.DATETIME: "dt",
-        StandardSqlTypeNames.INTERVAL: "|-|",
-        StandardSqlTypeNames.GEOGRAPHY: "geo",
-        StandardSqlTypeNames.NUMERIC: "#.#",
-        StandardSqlTypeNames.BIGNUMERIC: "#.#",
-        StandardSqlTypeNames.JSON: "{j}",
-        StandardSqlTypeNames.ARRAY: "[]",
-        StandardSqlTypeNames.STRUCT: "{}",
-    }
-
     def __init__(self, *args: Any, init_message: str = "", **kwargs: Any) -> None:
         self.init_message = init_message
         try:
             self.client = bigquery.Client()
+            # TODO: Install BigQuery Storage client for faster querying
+            self.conn = bigquery.dbapi.Connection(self.client)
         except Exception as e:
             raise HarlequinConnectionError(
                 msg=str(e), title="Harlequin could not connect to BigQuery."
@@ -94,17 +104,15 @@ class BigQueryConnection(HarlequinConnection):
 
     def execute(self, query: str) -> HarlequinCursor | None:
         try:
-            cur = self.client.execute(query)  # type: ignore
+            cursor = self.conn.cursor()
+            cursor.execute(query)
         except Exception as e:
             raise HarlequinQueryError(
                 msg=str(e),
                 title="Harlequin encountered an error while executing your query.",
             ) from e
-        else:
-            if cur is not None:
-                return BigQueryCursor(cur)
-            else:
-                return None
+
+        return BigQueryCursor(cursor)
 
     ## TODO: Ideas for options
     # Include hidden datasets?
@@ -134,7 +142,7 @@ class BigQueryConnection(HarlequinConnection):
                     ):
                         type_label = "?"  # Type is unspecified
                     else:
-                        type_label = self.COLUMN_TYPE_MAPPING[
+                        type_label = COLUMN_TYPE_MAPPING[
                             standard_sql_field.type.type_kind
                         ]
 
@@ -210,12 +218,11 @@ class BigQueryConnection(HarlequinConnection):
 
 
 class BigQueryAdapter(HarlequinAdapter):
-    ADAPTER_OPTIONS = BIGQUERY_ADAPTER_OPTIONS
+    # ADAPTER_OPTIONS = BIGQUERY_ADAPTER_OPTIONS
 
-    def __init__(self, conn_str: Sequence[str], **options: Any) -> None:
-        self.conn_str = conn_str
+    def __init__(self, **options: Any) -> None:
         self.options = options
 
     def connect(self) -> BigQueryConnection:
-        conn = BigQueryConnection(self.conn_str, self.options)
+        conn = BigQueryConnection(self.options)
         return conn
