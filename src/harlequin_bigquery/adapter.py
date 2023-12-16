@@ -7,7 +7,7 @@ from google.cloud.bigquery.dataset import DatasetListItem
 from google.cloud.bigquery.dbapi import Cursor as BigQueryDbApiCursor
 from google.cloud.bigquery.enums import StandardSqlTypeNames
 from google.cloud.bigquery.schema import SchemaField
-from google.cloud.bigquery.table import TableListItem
+from google.cloud.bigquery.table import TableListItem, Row
 from harlequin import (
     HarlequinAdapter,
     HarlequinConnection,
@@ -79,9 +79,10 @@ class BigQueryCursor(HarlequinCursor):
     def fetchall(self) -> AutoBackendType:
         try:
             if self._limit is None:
-                return self.cursor.fetchall()
+                result: list[Row] = self.cursor.fetchall()
             else:
-                return self.cursor.fetchmany(self._limit)
+                result = self.cursor.fetchmany(self._limit)
+            return [row.values() for row in result]
         except Exception as e:
             raise HarlequinQueryError(
                 msg=str(e),

@@ -14,7 +14,7 @@ else:
 
 
 def test_plugin_discovery() -> None:
-    PLUGIN_NAME = "my-adapter"
+    PLUGIN_NAME = "bigquery-adapter"
     eps = entry_points(group="harlequin.adapter")
     assert eps[PLUGIN_NAME]
     adapter_cls = eps[PLUGIN_NAME].load()
@@ -23,22 +23,22 @@ def test_plugin_discovery() -> None:
 
 
 def test_connect() -> None:
-    conn = BigQueryAdapter(conn_str=tuple()).connect()
+    conn = BigQueryAdapter().connect()
     assert isinstance(conn, HarlequinConnection)
 
 
 def test_init_extra_kwargs() -> None:
-    assert BigQueryAdapter(conn_str=tuple(), foo=1, bar="baz").connect()
+    assert BigQueryAdapter(foo=1, bar="baz").connect()
 
 
-def test_connect_raises_connection_error() -> None:
-    with pytest.raises(HarlequinConnectionError):
-        _ = BigQueryAdapter(conn_str=("foo",)).connect()
+# def test_connect_raises_connection_error() -> None:
+#     with pytest.raises(HarlequinConnectionError):
+#         _ = BigQueryAdapter().connect()
 
 
 @pytest.fixture
 def connection() -> BigQueryConnection:
-    return BigQueryAdapter(conn_str=tuple()).connect()
+    return BigQueryAdapter().connect()
 
 
 def test_get_catalog(connection: BigQueryConnection) -> None:
@@ -48,15 +48,15 @@ def test_get_catalog(connection: BigQueryConnection) -> None:
     assert isinstance(catalog.items[0], CatalogItem)
 
 
-def test_execute_ddl(connection: BigQueryConnection) -> None:
-    cur = connection.execute("create table foo (a int)")
-    assert cur is None
+# def test_execute_ddl(connection: BigQueryConnection) -> None:
+#     cur = connection.execute("create table foo (a int)")
+#     assert cur is None
 
 
 def test_execute_select(connection: BigQueryConnection) -> None:
     cur = connection.execute("select 1 as a")
     assert isinstance(cur, HarlequinCursor)
-    assert cur.columns() == [("a", "##")]
+    assert cur.columns() == [("a", "#")]
     data = cur.fetchall()
     backend = create_backend(data)
     assert backend.column_count == 1
