@@ -16,6 +16,7 @@ bigquery-adapter = "harlequin_bigquery:BigQueryAdapter"
 python = ">=3.8.1,<4.0"
 harlequin = "^1.7"
 google-cloud-bigquery = "^3.14.1"
+google-cloud-bigquery-storage = "^2.24.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.1.6"
