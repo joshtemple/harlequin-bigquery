@@ -18,6 +18,8 @@ from harlequin.exception import HarlequinConnectionError, HarlequinQueryError
 from textual_fastdatatable.backend import AutoBackendType
 
 from harlequin_bigquery.cli_options import BIGQUERY_ADAPTER_OPTIONS
+from harlequin_bigquery.keywords import RESERVED_KEYWORDS
+from harlequin_bigquery.functions import BUILTIN_FUNCTIONS
 
 
 class BigQueryCursor(HarlequinCursor):
@@ -170,14 +172,41 @@ class BigQueryConnection(HarlequinConnection):
         return Catalog(items=dataset_items)
 
     def get_completions(self) -> list[HarlequinCompletion]:
-        type_names = [name.value for name in StandardSqlTypeNames]
-        extra_keywords = ["foo", "bar", "baz"]
-        return [
+        type_completions = [
             HarlequinCompletion(
-                label=item, type_label="kw", value=item, priority=1000, context=None
+                label=str(type_name.value),
+                type_label="type",
+                value=str(type_name.value),
+                priority=1000,
+                context=None,
             )
-            for item in extra_keywords
+            for type_name in StandardSqlTypeNames
         ]
+
+        keyword_completions = [
+            HarlequinCompletion(
+                label=keyword,
+                type_label="kw",
+                value=keyword,
+                priority=100,
+                context=None,
+            )
+            for keyword in RESERVED_KEYWORDS
+        ]
+
+        # TODO: Get UDFs and routines
+        function_completions = [
+            HarlequinCompletion(
+                label=name,
+                type_label="fn",
+                value=name,
+                priority=1000,
+                context=None,
+            )
+            for name in BUILTIN_FUNCTIONS
+        ]
+
+        return [*type_completions, *keyword_completions, *function_completions]
 
 
 class BigQueryAdapter(HarlequinAdapter):
