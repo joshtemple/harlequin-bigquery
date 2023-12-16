@@ -10,7 +10,7 @@ packages = [
 ]
 
 [tool.poetry.plugins."harlequin.adapter"]
-my-adapter = "harlequin_bigquery:BigQueryAdapter"
+bigquery-adapter = "harlequin_bigquery:BigQueryAdapter"
 
 [tool.poetry.dependencies]
 python = ">=3.8.1,<4.0"
