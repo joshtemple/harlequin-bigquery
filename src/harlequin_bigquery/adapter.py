@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from typing import Any, Sequence
 
+from google.cloud import bigquery
+from google.cloud.bigquery.dataset import DatasetListItem
+from google.cloud.bigquery.enums import StandardSqlTypeNames
+from google.cloud.bigquery.schema import SchemaField
+from google.cloud.bigquery.table import TableListItem
 from harlequin import (
     HarlequinAdapter,
     HarlequinConnection,
@@ -43,20 +48,51 @@ class BigQueryCursor(HarlequinCursor):
 
 
 class BigQueryConnection(HarlequinConnection):
-    def __init__(
-        self, conn_str: Sequence[str], *args: Any, init_message: str = "", **kwargs: Any
-    ) -> None:
+    # Abbreviations for table types
+    TABLE_TYPE_MAPPING = {
+        "TABLE": "t",
+        "VIEW": "v",
+        "EXTERNAL": "ext",
+    }
+
+    # Abbreviations for column types
+    # TODO: Write a test that we have all types mapped
+    COLUMN_TYPE_MAPPING = {
+        StandardSqlTypeNames.TYPE_KIND_UNSPECIFIED: "?",
+        StandardSqlTypeNames.INT64: "#",
+        StandardSqlTypeNames.BOOL: "t/f",
+        StandardSqlTypeNames.FLOAT64: "#.#",
+        StandardSqlTypeNames.STRING: "s",
+        StandardSqlTypeNames.BYTES: "0b",
+        StandardSqlTypeNames.TIMESTAMP: "ts",
+        StandardSqlTypeNames.DATE: "d",
+        StandardSqlTypeNames.TIME: "t",
+        StandardSqlTypeNames.DATETIME: "dt",
+        StandardSqlTypeNames.INTERVAL: "|-|",
+        StandardSqlTypeNames.GEOGRAPHY: "geo",
+        StandardSqlTypeNames.NUMERIC: "#.#",
+        StandardSqlTypeNames.BIGNUMERIC: "#.#",
+        StandardSqlTypeNames.JSON: "{j}",
+        StandardSqlTypeNames.ARRAY: "[]",
+        StandardSqlTypeNames.STRUCT: "{}",
+    }
+
+    def __init__(self, *args: Any, init_message: str = "", **kwargs: Any) -> None:
         self.init_message = init_message
         try:
-            self.conn = "your database library's connect method goes here"
+            self.client = bigquery.Client()
         except Exception as e:
             raise HarlequinConnectionError(
-                msg=str(e), title="Harlequin could not connect to your database."
+                msg=str(e), title="Harlequin could not connect to BigQuery."
             ) from e
+
+    @property
+    def project(self) -> str:
+        return self.client.project
 
     def execute(self, query: str) -> HarlequinCursor | None:
         try:
-            cur = self.conn.execute(query)  # type: ignore
+            cur = self.client.execute(query)  # type: ignore
         except Exception as e:
             raise HarlequinQueryError(
                 msg=str(e),
@@ -68,56 +104,73 @@ class BigQueryConnection(HarlequinConnection):
             else:
                 return None
 
+    ## TODO: Ideas for options
+    # Include hidden datasets?
+
     def get_catalog(self) -> Catalog:
-        databases = self.conn.list_databases()
-        db_items: list[CatalogItem] = []
-        for db in databases:
-            schemas = self.conn.list_schemas_in_db(db)
-            schema_items: list[CatalogItem] = []
-            for schema in schemas:
-                relations = self.conn.list_relations_in_schema(schema)
-                rel_items: list[CatalogItem] = []
-                for rel, rel_type in relations:
-                    cols = self.conn.list_columns_in_relation(rel)
-                    col_items = [
+        dataset_items: list[CatalogItem] = []
+        datasets = self.client.list_datasets()
+        dataset: DatasetListItem
+        for dataset in datasets:
+            tables = self.client.list_tables(dataset.dataset_id)
+            table_items: list[CatalogItem] = []
+            table: TableListItem
+            for table in tables:
+                # Get full table object so we can get schema
+                table_obj = self.client.get_table(table.reference)
+
+                # Get columns
+                schema = table_obj.schema
+                field: SchemaField
+                field_items: list[CatalogItem] = []
+                for field in schema:
+                    standard_sql_field = field.to_standard_sql()
+
+                    if (
+                        not standard_sql_field.type
+                        or not standard_sql_field.type.type_kind
+                    ):
+                        type_label = "?"  # Type is unspecified
+                    else:
+                        type_label = self.COLUMN_TYPE_MAPPING[
+                            standard_sql_field.type.type_kind
+                        ]
+
+                    label = standard_sql_field.name if standard_sql_field.name else "?"
+
+                    field_items.append(
                         CatalogItem(
-                            qualified_identifier=f'"{db}"."{schema}"."{rel}"."{col}"',
-                            query_name=f'"{col}"',
-                            label=col,
-                            type_label=col_type,
-                        )
-                        for col, col_type in cols
-                    ]
-                    rel_items.append(
-                        CatalogItem(
-                            qualified_identifier=f'"{db}"."{schema}"."{rel}"',
-                            query_name=f'"{db}"."{schema}"."{rel}"',
-                            label=rel,
-                            type_label=rel_type,
-                            children=col_items,
+                            qualified_identifier=f"`{self.project}`.`{dataset.dataset_id}`.`{table.table_id}`.`{field.name}`",
+                            query_name=f"`{field.name}`",
+                            label=label,
+                            type_label=type_label,
                         )
                     )
-                schema_items.append(
+
+                table_items.append(
                     CatalogItem(
-                        qualified_identifier=f'"{db}"."{schema}"',
-                        query_name=f'"{db}"."{schema}"',
-                        label=schema,
-                        type_label="s",
-                        children=rel_items,
+                        qualified_identifier=f"`{self.project}`.`{dataset.dataset_id}`.`{table.table_id}`",
+                        query_name=f"`{self.project}`.`{dataset.dataset_id}`.`{table.table_id}`",
+                        label=table.table_id,
+                        type_label=self.TABLE_TYPE_MAPPING[table.table_type],
+                        children=field_items,
                     )
                 )
-            db_items.append(
+
+            dataset_items.append(
                 CatalogItem(
-                    qualified_identifier=f'"{db}"',
-                    query_name=f'"{db}"',
-                    label=db,
-                    type_label="db",
-                    children=schema_items,
+                    qualified_identifier=f"`{self.project}`.`{dataset.dataset_id}`",
+                    query_name=f"`{self.project}`.`{dataset.dataset_id}`",
+                    label=dataset.dataset_id,
+                    type_label="ds",
+                    children=table_items,
                 )
             )
-        return Catalog(items=db_items)
+
+        return Catalog(items=dataset_items)
 
     def get_completions(self) -> list[HarlequinCompletion]:
+        type_names = [name.value for name in StandardSqlTypeNames]
         extra_keywords = ["foo", "bar", "baz"]
         return [
             HarlequinCompletion(
