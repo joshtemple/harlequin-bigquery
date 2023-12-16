@@ -3,7 +3,7 @@ import sys
 import pytest
 from harlequin.adapter import HarlequinAdapter, HarlequinConnection, HarlequinCursor
 from harlequin.catalog import Catalog, CatalogItem
-from harlequin.exception import HarlequinConnectionError, HarlequinQueryError
+from harlequin.exception import HarlequinQueryError
 from harlequin_bigquery.adapter import BigQueryAdapter, BigQueryConnection
 from textual_fastdatatable.backend import create_backend
 
