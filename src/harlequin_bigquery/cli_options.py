@@ -12,4 +12,4 @@ foo = TextOption(
     short_decls=["-f"],
 )
 
-MYADAPTER_OPTIONS = [foo]
+BIGQUERY_ADAPTER_OPTIONS = [foo]

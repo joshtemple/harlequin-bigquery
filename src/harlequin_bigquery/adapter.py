@@ -12,10 +12,10 @@ from harlequin.catalog import Catalog, CatalogItem
 from harlequin.exception import HarlequinConnectionError, HarlequinQueryError
 from textual_fastdatatable.backend import AutoBackendType
 
-from harlequin_myadapter.cli_options import MYADAPTER_OPTIONS
+from harlequin_bigquery.cli_options import BIGQUERY_ADAPTER_OPTIONS
 
 
-class MyCursor(HarlequinCursor):
+class BigQueryCursor(HarlequinCursor):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         self.cur = args[0]
         self._limit: int | None = None
@@ -25,7 +25,7 @@ class MyCursor(HarlequinCursor):
         types = self.cur.column_types
         return list(zip(names, types))
 
-    def set_limit(self, limit: int) -> MyCursor:
+    def set_limit(self, limit: int) -> BigQueryCursor:
         self._limit = limit
         return self
 
@@ -42,7 +42,7 @@ class MyCursor(HarlequinCursor):
             ) from e
 
 
-class MyConnection(HarlequinConnection):
+class BigQueryConnection(HarlequinConnection):
     def __init__(
         self, conn_str: Sequence[str], *args: Any, init_message: str = "", **kwargs: Any
     ) -> None:
@@ -64,7 +64,7 @@ class MyConnection(HarlequinConnection):
             ) from e
         else:
             if cur is not None:
-                return MyCursor(cur)
+                return BigQueryCursor(cur)
             else:
                 return None
 
@@ -127,13 +127,13 @@ class MyConnection(HarlequinConnection):
         ]
 
 
-class MyAdapter(HarlequinAdapter):
-    ADAPTER_OPTIONS = MYADAPTER_OPTIONS
+class BigQueryAdapter(HarlequinAdapter):
+    ADAPTER_OPTIONS = BIGQUERY_ADAPTER_OPTIONS
 
     def __init__(self, conn_str: Sequence[str], **options: Any) -> None:
         self.conn_str = conn_str
         self.options = options
 
-    def connect(self) -> MyConnection:
-        conn = MyConnection(self.conn_str, self.options)
+    def connect(self) -> BigQueryConnection:
+        conn = BigQueryConnection(self.conn_str, self.options)
         return conn

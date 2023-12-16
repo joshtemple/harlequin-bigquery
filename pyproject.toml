@@ -1,16 +1,16 @@
 [tool.poetry]
-name = "harlequin_myadapter"
+name = "harlequin_bigquery"
 version = "0.1.0"
-description = "A Harlequin adapter for <my favorite database>."
-authors = ["Ted Conbeer <tconbeer@users.noreply.github.com>"]
+description = "A Harlequin adapter for Google BigQuery."
+authors = ["Josh Temple <tconbeer@users.noreply.github.com>"]
 license = "MIT"
 readme = "README.md"
 packages = [
-    { include = "harlequin_myadapter", from = "src" },
+    { include = "harlequin_bigquery", from = "src" },
 ]
 
 [tool.poetry.plugins."harlequin.adapter"]
-my-adapter = "harlequin_myadapter:MyAdapter"
+my-adapter = "harlequin_bigquery:BigQueryAdapter"
 
 [tool.poetry.dependencies]
 python = ">=3.8.1,<4.0"
