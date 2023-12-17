@@ -4,7 +4,12 @@ import pytest
 from harlequin.adapter import HarlequinAdapter, HarlequinConnection, HarlequinCursor
 from harlequin.catalog import Catalog, CatalogItem
 from harlequin.exception import HarlequinQueryError
-from harlequin_bigquery.adapter import BigQueryAdapter, BigQueryConnection
+from harlequin_bigquery.adapter import (
+    BigQueryAdapter,
+    BigQueryConnection,
+    COLUMN_TYPE_MAPPING,
+)
+from google.cloud.bigquery.enums import StandardSqlTypeNames
 from textual_fastdatatable.backend import create_backend
 
 if sys.version_info < (3, 10):
@@ -87,3 +92,9 @@ def test_set_limit(connection: BigQueryConnection) -> None:
 def test_execute_raises_query_error(connection: BigQueryConnection) -> None:
     with pytest.raises(HarlequinQueryError):
         _ = connection.execute("selec;")
+
+
+def test_all_column_types_are_mapped() -> None:
+    assert len(StandardSqlTypeNames) == len(COLUMN_TYPE_MAPPING)
+    for value in StandardSqlTypeNames:
+        assert value in COLUMN_TYPE_MAPPING

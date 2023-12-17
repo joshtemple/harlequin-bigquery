@@ -22,7 +22,6 @@ from harlequin_bigquery.functions import BUILTIN_FUNCTIONS
 from harlequin_bigquery.keywords import RESERVED_KEYWORDS
 
 # Abbreviations for column types
-# TODO: Write a test that we have all types mapped
 COLUMN_TYPE_MAPPING = {
     StandardSqlTypeNames.TYPE_KIND_UNSPECIFIED: "?",
     StandardSqlTypeNames.INT64: "#",
@@ -50,10 +49,6 @@ class BigQueryCursor(HarlequinCursor):
         self._limit: int | None = None
 
     def columns(self) -> list[tuple[str, str]]:
-        # TODO: Handle this case better
-        if not self.cursor.description:
-            raise TypeError("Cursor has no description")
-
         if not self.cursor.query_job:
             raise TypeError("Cursor has no query job")
 
@@ -61,7 +56,6 @@ class BigQueryCursor(HarlequinCursor):
         fields = []
         # Cursor.description is undocumented but exactly what we need
         for field in result_schema:
-            # TODO: Make DRY
             standard_sql_field = field.to_standard_sql()
             if not standard_sql_field.type or not standard_sql_field.type.type_kind:
                 type_label = "?"  # Type is unspecified
@@ -114,7 +108,6 @@ class BigQueryConnection(HarlequinConnection):
         self.init_message = init_message
         try:
             self.client = bigquery.Client(project=project, location=location)
-            # TODO: Install BigQuery Storage client for faster querying
             self.conn = bigquery.dbapi.Connection(self.client)
         except Exception as e:
             raise HarlequinConnectionError(
@@ -136,9 +129,6 @@ class BigQueryConnection(HarlequinConnection):
             ) from e
 
         return BigQueryCursor(cursor)
-
-    ## TODO: Ideas for options
-    # Include hidden datasets?
 
     def get_catalog(self) -> Catalog:
         query = f"""
