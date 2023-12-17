@@ -4,11 +4,9 @@ import re
 from typing import Any
 
 from google.cloud import bigquery
-from google.cloud.bigquery.dataset import DatasetListItem
 from google.cloud.bigquery.dbapi import Cursor as BigQueryDbApiCursor
 from google.cloud.bigquery.enums import StandardSqlTypeNames
-from google.cloud.bigquery.schema import SchemaField
-from google.cloud.bigquery.table import Row, TableListItem
+from google.cloud.bigquery.table import Row
 from harlequin import (
     HarlequinAdapter,
     HarlequinConnection,
