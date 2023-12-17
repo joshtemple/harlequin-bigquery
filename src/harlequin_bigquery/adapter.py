@@ -54,7 +54,6 @@ class BigQueryCursor(HarlequinCursor):
 
         result_schema = self.cursor.query_job.result().schema
         fields = []
-        # Cursor.description is undocumented but exactly what we need
         for field in result_schema:
             standard_sql_field = field.to_standard_sql()
             if not standard_sql_field.type or not standard_sql_field.type.type_kind:
