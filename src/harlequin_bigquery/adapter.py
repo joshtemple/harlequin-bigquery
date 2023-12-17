@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from google.cloud import bigquery
@@ -92,9 +93,15 @@ class BigQueryCursor(HarlequinCursor):
 
 class BigQueryConnection(HarlequinConnection):
     # Abbreviations for table types
+    # From the `table_type` field in the INFORMATION_SCHEMA.TABLES table
+    # https://cloud.google.com/bigquery/docs/information-schema-tables#schema
+
     TABLE_TYPE_MAPPING = {
-        "TABLE": "t",
+        "BASE TABLE": "t",
+        "CLONE": "tc",
+        "SNAPSHOT": "ts",
         "VIEW": "v",
+        "MATERIALIZED VIEW": "mv",
         "EXTERNAL": "ext",
     }
 
@@ -136,62 +143,70 @@ class BigQueryConnection(HarlequinConnection):
     # Include hidden datasets?
 
     def get_catalog(self) -> Catalog:
+        query = f"""
+            select
+                table_schema as dataset_id,
+                table_name as table_id,
+                table_type as table_type,
+                column_name,
+                data_type as column_type
+            from `{self.project}.region-{self.location}.INFORMATION_SCHEMA.TABLES`
+            left join `{self.project}.region-{self.location}.INFORMATION_SCHEMA.COLUMNS`
+            using (table_catalog, table_schema, table_name)
+            order by dataset_id, table_id, column_name
+        """
+        cursor = self.execute(query)
+        results = cursor.cursor.fetchall()
+
+        dataset_id = None
+        table_id = None
         dataset_items: list[CatalogItem] = []
-        datasets = self.client.list_datasets()
-        dataset: DatasetListItem
-        for dataset in datasets:
-            tables = self.client.list_tables(dataset.dataset_id)
-            table_items: list[CatalogItem] = []
-            table: TableListItem
-            for table in tables:
-                # Get full table object so we can get schema
-                table_obj = self.client.get_table(table.reference)
+        table_items: list[CatalogItem] = []
+        column_items: list[CatalogItem] = []
 
-                # Get columns
-                schema = table_obj.schema
-                field: SchemaField
-                field_items: list[CatalogItem] = []
-                for field in schema:
-                    standard_sql_field = field.to_standard_sql()
-
-                    if (
-                        not standard_sql_field.type
-                        or not standard_sql_field.type.type_kind
-                    ):
-                        type_label = "?"  # Type is unspecified
-                    else:
-                        type_label = COLUMN_TYPE_MAPPING[
-                            standard_sql_field.type.type_kind
-                        ]
-
-                    label = standard_sql_field.name if standard_sql_field.name else "?"
-
-                    field_items.append(
-                        CatalogItem(
-                            qualified_identifier=f"`{self.project}`.`{dataset.dataset_id}`.`{table.table_id}`.`{field.name}`",
-                            query_name=f"`{field.name}`",
-                            label=label,
-                            type_label=type_label,
-                        )
-                    )
-
+        # Iterate in sorted order by dataset, table, then column
+        for row in results:
+            if table_id is None:
+                table_id = row.table_id
+            elif row.table_id != table_id:
                 table_items.append(
                     CatalogItem(
-                        qualified_identifier=f"`{self.project}`.`{dataset.dataset_id}`.`{table.table_id}`",
-                        query_name=f"`{self.project}`.`{dataset.dataset_id}`.`{table.table_id}`",
-                        label=table.table_id,
-                        type_label=self.TABLE_TYPE_MAPPING[table.table_type],
-                        children=field_items,
+                        qualified_identifier=f"`{self.project}`.`{dataset_id}`.`{table_id}`",
+                        query_name=f"`{table_id}`",
+                        label=table_id,
+                        type_label=self.TABLE_TYPE_MAPPING[row.table_type],
+                        children=column_items,
                     )
                 )
+                column_items = []
+                table_id = row.table_id
 
-            dataset_items.append(
+            if dataset_id is None:
+                dataset_id = row.dataset_id
+            elif row.dataset_id != dataset_id:
+                dataset_items.append(
+                    CatalogItem(
+                        qualified_identifier=f"`{self.project}`.`{dataset_id}`",
+                        query_name=f"`{dataset_id}`",
+                        label=dataset_id,
+                        type_label="ds",
+                        children=table_items,
+                    )
+                )
+                table_items = []
+                dataset_id = row.dataset_id
+
+            # remove anything in <> from the column_type
+            column_type_cleaned = re.sub(r"\<.*\>", "", row.column_type)
+            column_type_label = COLUMN_TYPE_MAPPING[
+                StandardSqlTypeNames(column_type_cleaned)
+            ]
+            column_items.append(
                 CatalogItem(
-                    qualified_identifier=f"`{self.project}`.`{dataset.dataset_id}`",
-                    query_name=f"`{self.project}`.`{dataset.dataset_id}`",
-                    label=dataset.dataset_id,
-                    type_label="ds",
-                    children=table_items,
+                    qualified_identifier=f"`{self.project}`.`{row.dataset_id}`.`{row.table_id}`.`{row.column_name}`",
+                    query_name=f"`{row.column_name}`",
+                    label=row.column_name,
+                    type_label=column_type_label,
                 )
             )
 
