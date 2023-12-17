@@ -196,6 +196,25 @@ class BigQueryConnection(HarlequinConnection):
                     type_label=column_type_label,
                 )
             )
+        else:
+            table_items.append(
+                CatalogItem(
+                    qualified_identifier=f"`{self.project}`.`{dataset_id}`.`{table_id}`",
+                    query_name=f"`{table_id}`",
+                    label=table_id,
+                    type_label=self.TABLE_TYPE_MAPPING[row.table_type],
+                    children=column_items,
+                )
+            )
+            dataset_items.append(
+                CatalogItem(
+                    qualified_identifier=f"`{self.project}`.`{dataset_id}`",
+                    query_name=f"`{dataset_id}`",
+                    label=dataset_id,
+                    type_label="ds",
+                    children=table_items,
+                )
+            )
 
         return Catalog(items=dataset_items)
 
