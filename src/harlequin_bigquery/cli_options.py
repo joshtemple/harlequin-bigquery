@@ -6,10 +6,16 @@ from harlequin.options import (
     TextOption,
 )
 
-foo = TextOption(
-    name="foo",
-    description="Help text goes here",
-    short_decls=["-f"],
+project = TextOption(
+    name="project",
+    description="The project ID to use for the BigQuery connection",
+    short_decls=["-p"],
 )
 
-BIGQUERY_ADAPTER_OPTIONS = [foo]
+location = TextOption(
+    name="location",
+    description="The location to use for the BigQuery connection",
+    short_decls=["-l"],
+)
+
+BIGQUERY_ADAPTER_OPTIONS = [project, location]

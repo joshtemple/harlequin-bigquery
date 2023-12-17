@@ -18,6 +18,7 @@ from harlequin.catalog import Catalog, CatalogItem
 from harlequin.exception import HarlequinConnectionError, HarlequinQueryError
 from textual_fastdatatable.backend import AutoBackendType
 
+from harlequin_bigquery.cli_options import BIGQUERY_ADAPTER_OPTIONS
 from harlequin_bigquery.functions import BUILTIN_FUNCTIONS
 from harlequin_bigquery.keywords import RESERVED_KEYWORDS
 
@@ -97,10 +98,17 @@ class BigQueryConnection(HarlequinConnection):
         "EXTERNAL": "ext",
     }
 
-    def __init__(self, *args: Any, init_message: str = "", **kwargs: Any) -> None:
+    def __init__(
+        self,
+        project: str | None = None,
+        location: str | None = None,
+        init_message: str = "",
+        **_: Any,
+    ) -> None:
+        self.location = location or "US"
         self.init_message = init_message
         try:
-            self.client = bigquery.Client()
+            self.client = bigquery.Client(project=project, location=location)
             # TODO: Install BigQuery Storage client for faster querying
             self.conn = bigquery.dbapi.Connection(self.client)
         except Exception as e:
@@ -228,11 +236,14 @@ class BigQueryConnection(HarlequinConnection):
 
 
 class BigQueryAdapter(HarlequinAdapter):
-    # ADAPTER_OPTIONS = BIGQUERY_ADAPTER_OPTIONS
+    ADAPTER_OPTIONS = BIGQUERY_ADAPTER_OPTIONS  # type: ignore
 
-    def __init__(self, **options: Any) -> None:
-        self.options = options
+    def __init__(
+        self, project: str | None = None, location: str | None = None, **_: Any
+    ) -> None:
+        self.project = project
+        self.location = location
 
     def connect(self) -> BigQueryConnection:
-        conn = BigQueryConnection(self.options)
+        conn = BigQueryConnection(project=self.project, location=self.location)
         return conn
