@@ -112,7 +112,7 @@ class BigQueryConnection(HarlequinConnection):
     def project(self) -> str:
         return self.client.project
 
-    def execute(self, query: str) -> HarlequinCursor | None:
+    def execute(self, query: str) -> BigQueryCursor:
         try:
             cursor = self.conn.cursor()
             cursor.execute(query)
