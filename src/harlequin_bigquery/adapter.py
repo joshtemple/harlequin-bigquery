@@ -70,6 +70,10 @@ class BigQueryCursor(HarlequinCursor):
 
     def fetchall(self) -> AutoBackendType:
         try:
+            if not self.cursor.query_job:
+                raise RuntimeError("Cursor has no query job")
+            if not self.cursor.query_job.destination:
+                return []
             if self._limit is None:
                 result: list[Row] = self.cursor.fetchall()
             else:
