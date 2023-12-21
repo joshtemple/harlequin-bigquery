@@ -152,83 +152,52 @@ class BigQueryConnection(HarlequinConnection):
         cursor = self.execute(query)
         results = cursor.cursor.fetchall()
 
-        dataset_id = None
-        table_id = None
-        dataset_items: list[CatalogItem] = []
-        table_items: list[CatalogItem] = []
-        column_items: list[CatalogItem] = []
+        current_dataset = current_table = None
+        datasets: dict[str, CatalogItem] = {}
 
         # Iterate in sorted order by dataset, table, then column
         for row in results:
-            if row.table_id is None:  # Empty dataset
-                pass
-            elif table_id is None:
-                table_id = row.table_id
-            elif row.table_id != table_id:
-                table_items.append(
-                    CatalogItem(
-                        qualified_identifier=f"`{self.project}`.`{dataset_id}`.`{table_id}`",
-                        query_name=f"`{table_id}`",
-                        label=table_id,
-                        type_label=self.TABLE_TYPE_MAPPING[row.table_type],
-                        children=column_items,
-                    )
+            dataset_id = row.dataset_id
+            table_id = row.table_id
+            column_name = row.column_name
+
+            if dataset_id != current_dataset:
+                current_dataset = dataset_id
+                datasets[row.dataset_id] = CatalogItem(
+                    qualified_identifier=f"`{self.project}`.`{dataset_id}`",
+                    query_name=f"`{dataset_id}`",
+                    label=dataset_id,
+                    type_label="ds",
+                    children=[],
                 )
-                column_items = []
-                table_id = row.table_id
 
-            if dataset_id is None:
-                dataset_id = row.dataset_id
-            elif row.dataset_id != dataset_id:
-                dataset_items.append(
-                    CatalogItem(
-                        qualified_identifier=f"`{self.project}`.`{dataset_id}`",
-                        query_name=f"`{dataset_id}`",
-                        label=dataset_id,
-                        type_label="ds",
-                        children=table_items,
-                    )
+            if table_id and table_id != current_table:
+                current_table = table_id
+                table_catalog_item = CatalogItem(
+                    qualified_identifier=f"`{self.project}`.`{dataset_id}`.`{table_id}`",
+                    query_name=f"`{table_id}`",
+                    label=table_id,
+                    type_label=self.TABLE_TYPE_MAPPING[row.table_type],
+                    children=[],
                 )
-                table_items = []
-                dataset_id = row.dataset_id
+                datasets[dataset_id].children.append(table_catalog_item)
 
-            if not row.column_name and not row.column_type:
-                continue
-
-            # remove anything in <> from the column_type
-            column_type_cleaned = re.sub(r"\<.*\>", "", row.column_type)
-            column_type_label = COLUMN_TYPE_MAPPING[
-                StandardSqlTypeNames(column_type_cleaned)
-            ]
-            column_items.append(
-                CatalogItem(
+            if column_name:
+                # remove anything in <> from the column_type
+                column_type_cleaned = re.sub(r"\<.*\>", "", row.column_type)
+                column_type_label = COLUMN_TYPE_MAPPING[
+                    StandardSqlTypeNames(column_type_cleaned)
+                ]
+                column_catalog_item = CatalogItem(
                     qualified_identifier=f"`{self.project}`.`{row.dataset_id}`.`{row.table_id}`.`{row.column_name}`",
                     query_name=f"`{row.column_name}`",
                     label=row.column_name,
                     type_label=column_type_label,
                 )
-            )
-        else:
-            table_items.append(
-                CatalogItem(
-                    qualified_identifier=f"`{self.project}`.`{dataset_id}`.`{table_id}`",
-                    query_name=f"`{table_id}`",
-                    label=table_id,
-                    type_label=self.TABLE_TYPE_MAPPING[row.table_type],
-                    children=column_items,
-                )
-            )
-            dataset_items.append(
-                CatalogItem(
-                    qualified_identifier=f"`{self.project}`.`{dataset_id}`",
-                    query_name=f"`{dataset_id}`",
-                    label=dataset_id,
-                    type_label="ds",
-                    children=table_items,
-                )
-            )
+                # Relies on order being sorted
+                datasets[dataset_id].children[-1].children.append(column_catalog_item)
 
-        return Catalog(items=dataset_items)
+        return Catalog(items=list(datasets.values()))
 
     def get_completions(self) -> list[HarlequinCompletion]:
         type_completions = [
