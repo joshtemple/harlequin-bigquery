@@ -1,15 +1,15 @@
 import sys
 
 import pytest
+from google.cloud.bigquery.enums import StandardSqlTypeNames
 from harlequin.adapter import HarlequinAdapter, HarlequinConnection, HarlequinCursor
 from harlequin.catalog import Catalog, CatalogItem
 from harlequin.exception import HarlequinQueryError
 from harlequin_bigquery.adapter import (
+    COLUMN_TYPE_MAPPING,
     BigQueryAdapter,
     BigQueryConnection,
-    COLUMN_TYPE_MAPPING,
 )
-from google.cloud.bigquery.enums import StandardSqlTypeNames
 from textual_fastdatatable.backend import create_backend
 
 if sys.version_info < (3, 10):
@@ -36,11 +36,6 @@ def test_init_extra_kwargs() -> None:
     assert BigQueryAdapter(foo=1, bar="baz").connect()
 
 
-# def test_connect_raises_connection_error() -> None:
-#     with pytest.raises(HarlequinConnectionError):
-#         _ = BigQueryAdapter().connect()
-
-
 @pytest.fixture
 def connection() -> BigQueryConnection:
     return BigQueryAdapter().connect()
@@ -53,11 +48,6 @@ def test_get_catalog(connection: BigQueryConnection) -> None:
     assert isinstance(catalog.items[0], CatalogItem)
 
 
-# def test_execute_ddl(connection: BigQueryConnection) -> None:
-#     cur = connection.execute("create table foo (a int)")
-#     assert cur is None
-
-
 def test_execute_select(connection: BigQueryConnection) -> None:
     cur = connection.execute("select 1 as a")
     assert isinstance(cur, HarlequinCursor)
@@ -66,6 +56,14 @@ def test_execute_select(connection: BigQueryConnection) -> None:
     backend = create_backend(data)
     assert backend.column_count == 1
     assert backend.row_count == 1
+
+
+def test_execute_select_no_rows_returned(connection: BigQueryConnection) -> None:
+    cur = connection.execute("select a from (select 1 as a) where false")
+    assert isinstance(cur, HarlequinCursor)
+    assert cur.columns() == [("a", "#")]
+    data = cur.fetchall()
+    assert not data
 
 
 def test_execute_select_dupe_cols(connection: BigQueryConnection) -> None:
@@ -98,3 +96,68 @@ def test_all_column_types_are_mapped() -> None:
     assert len(StandardSqlTypeNames) == len(COLUMN_TYPE_MAPPING)
     for value in StandardSqlTypeNames:
         assert value in COLUMN_TYPE_MAPPING
+
+
+def test_create_and_select_temp_table(connection: BigQueryConnection):
+    query = """
+    WITH temp_users AS (
+        SELECT * FROM UNNEST([
+            STRUCT(1 AS user_id, 'Alice' AS user_name, DATE '2021-01-01' AS join_date),
+            STRUCT(2, 'Bob', DATE '2021-02-01'),
+            STRUCT(3, 'Charlie', DATE '2021-03-01')
+        ])
+    )
+    SELECT * FROM temp_users;
+    """
+    cursor = connection.execute(query)
+    data = cursor.fetchall()
+    backend = create_backend(data)
+    assert backend.row_count == 3
+
+
+def test_create_and_drop_temp_table(connection: BigQueryConnection):
+    query = """
+    CREATE TEMP TABLE test_table (
+        id INT64,
+        name STRING
+    );
+    DROP TABLE test_table;
+    """
+    cursor = connection.execute(query)
+    data = cursor.fetchall()
+    assert not data
+
+
+def test_insert_into_temp_table(connection: BigQueryConnection):
+    query = """
+    CREATE TEMP TABLE test_table (id INT64, name STRING);
+    INSERT INTO test_table (id, name) VALUES (1, 'Alice'), (2, 'Bob');
+    DROP TABLE test_table;
+    """
+    cursor = connection.execute(query)
+    data = cursor.fetchall()
+    assert not data
+
+
+def test_update_temp_table(connection: BigQueryConnection):
+    query = """
+    CREATE TEMP TABLE test_table (id INT64, name STRING);
+    INSERT INTO test_table (id, name) VALUES (1, 'Alice');
+    UPDATE test_table SET name = 'Alice Updated' WHERE id = 1;
+    DROP TABLE test_table;
+    """
+    cursor = connection.execute(query)
+    data = cursor.fetchall()
+    assert not data
+
+
+def test_delete_from_temp_table(connection: BigQueryConnection):
+    query = """
+    CREATE TEMP TABLE test_table (id INT64, name STRING);
+    INSERT INTO test_table (id, name) VALUES (1, 'Alice');
+    DELETE FROM test_table WHERE id = 1;
+    DROP TABLE test_table;
+    """
+    cursor = connection.execute(query)
+    data = cursor.fetchall()
+    assert not data
