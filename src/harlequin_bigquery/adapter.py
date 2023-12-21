@@ -136,13 +136,16 @@ class BigQueryConnection(HarlequinConnection):
     def get_catalog(self) -> Catalog:
         query = f"""
             select
-                table_schema as dataset_id,
-                table_name as table_id,
-                table_type as table_type,
-                column_name,
-                data_type as column_type
-            from `{self.project}.region-{self.location}.INFORMATION_SCHEMA.TABLES`
-            left join `{self.project}.region-{self.location}.INFORMATION_SCHEMA.COLUMNS`
+                datasets.schema_name as dataset_id,
+                tables.table_name as table_id,
+                tables.table_type as table_type,
+                columns,column_name,
+                columns.data_type as column_type
+            from `{self.project}.region-{self.location}.INFORMATION_SCHEMA.SCHEMATA` datasets
+            left join `{self.project}.region-{self.location}.INFORMATION_SCHEMA.TABLES` tables
+            on datasets.catalog_name = tables.table_catalog
+            and datasets.schema_name = tables.table_schema
+            left join `{self.project}.region-{self.location}.INFORMATION_SCHEMA.COLUMNS` columns
             using (table_catalog, table_schema, table_name)
             order by dataset_id, table_id, column_name
         """
@@ -157,7 +160,9 @@ class BigQueryConnection(HarlequinConnection):
 
         # Iterate in sorted order by dataset, table, then column
         for row in results:
-            if table_id is None:
+            if row.table_id is None:  # Empty dataset
+                pass
+            elif table_id is None:
                 table_id = row.table_id
             elif row.table_id != table_id:
                 table_items.append(
@@ -186,6 +191,9 @@ class BigQueryConnection(HarlequinConnection):
                 )
                 table_items = []
                 dataset_id = row.dataset_id
+
+            if not row.column_name and not row.column_type:
+                continue
 
             # remove anything in <> from the column_type
             column_type_cleaned = re.sub(r"\<.*\>", "", row.column_type)
