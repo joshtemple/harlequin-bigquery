@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from google.api_core.exceptions import ClientError
 from google.cloud import bigquery
 from google.cloud.bigquery.dbapi import Cursor as BigQueryDbApiCursor
 from google.cloud.bigquery.enums import StandardSqlTypeNames
@@ -123,7 +124,7 @@ class BigQueryConnection(HarlequinConnection):
 
     def execute(self, query: str) -> BigQueryCursor:
         try:
-            cursor = self.conn.cursor()
+            cursor: BigQueryDbApiCursor = self.conn.cursor()
             cursor.execute(query)
         except Exception as e:
             raise HarlequinQueryError(
@@ -235,6 +236,14 @@ class BigQueryConnection(HarlequinConnection):
         ]
 
         return [*type_completions, *keyword_completions, *function_completions]
+
+    def validate_sql(self, text: str) -> str:
+        cursor: BigQueryDbApiCursor = self.conn.cursor()
+        try:
+            cursor.execute(text, job_config=bigquery.QueryJobConfig(dry_run=True))
+        except ClientError:
+            return ""
+        return text
 
 
 class BigQueryAdapter(HarlequinAdapter):
