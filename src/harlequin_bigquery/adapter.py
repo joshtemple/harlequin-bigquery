@@ -18,7 +18,7 @@ from harlequin.exception import HarlequinConnectionError, HarlequinQueryError
 from textual_fastdatatable.backend import AutoBackendType
 
 from harlequin_bigquery.cli_options import BIGQUERY_ADAPTER_OPTIONS
-from harlequin_bigquery.functions import BUILTIN_FUNCTIONS
+from harlequin_bigquery.functions import AGGREGATE_FUNCTIONS, BUILTIN_FUNCTIONS
 from harlequin_bigquery.keywords import RESERVED_KEYWORDS
 
 # Abbreviations for column types
@@ -234,7 +234,23 @@ class BigQueryConnection(HarlequinConnection):
             for name in BUILTIN_FUNCTIONS
         ]
 
-        return [*type_completions, *keyword_completions, *function_completions]
+        aggregate_completions = [
+            HarlequinCompletion(
+                label=name,
+                type_label="agg",
+                value=name,
+                priority=1000,
+                context=None,
+            )
+            for name in AGGREGATE_FUNCTIONS
+        ]
+
+        return [
+            *type_completions,
+            *keyword_completions,
+            *function_completions,
+            *aggregate_completions,
+        ]
 
 
 class BigQueryAdapter(HarlequinAdapter):
