@@ -183,8 +183,8 @@ class BigQueryConnection(HarlequinConnection):
                 datasets[dataset_id].children.append(table_catalog_item)
 
             if column_name:
-                # remove anything in <> from the column_type
-                column_type_cleaned = re.sub(r"\<.*\>", "", row.column_type)
+                # remove anything in <> or () from the column_type
+                column_type_cleaned = re.sub(r"[<(].*[>)]", "", row.column_type)
                 column_type_label = COLUMN_TYPE_MAPPING[
                     StandardSqlTypeNames(column_type_cleaned)
                 ]
