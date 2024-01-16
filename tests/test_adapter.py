@@ -1,6 +1,8 @@
 import sys
+from typing import Any, Generator
 
 import pytest
+from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.enums import StandardSqlTypeNames
 from harlequin.adapter import HarlequinAdapter, HarlequinConnection, HarlequinCursor
 from harlequin.catalog import Catalog, CatalogItem
@@ -16,6 +18,19 @@ if sys.version_info < (3, 10):
     from importlib_metadata import entry_points
 else:
     from importlib.metadata import entry_points
+
+
+@pytest.fixture(scope="session")
+def bigquery_client() -> Client:
+    return Client()
+
+
+@pytest.fixture(scope="module")
+def test_dataset(bigquery_client: Client) -> Generator[str, None, None]:
+    dataset_name = "tmp__harlequin_bigquery_test"
+    bigquery_client.create_dataset(dataset_name, exists_ok=True)
+    yield dataset_name
+    bigquery_client.delete_dataset(dataset_name, delete_contents=True)
 
 
 def test_plugin_discovery() -> None:
@@ -46,6 +61,19 @@ def test_get_catalog(connection: BigQueryConnection) -> None:
     assert isinstance(catalog, Catalog)
     assert catalog.items
     assert isinstance(catalog.items[0], CatalogItem)
+
+
+def test_get_catalog_with_parameterized_types(
+    connection: BigQueryConnection, test_dataset: str
+) -> None:
+    # create a temporary table with a parametrized type
+    query = f"CREATE TABLE {test_dataset}.test_table (id NUMERIC(9, 8));"
+    cursor = connection.execute(query)
+    try:
+        catalog = connection.get_catalog()
+    finally:
+        connection.execute(f"DROP TABLE {test_dataset}.test_table;")
+    assert True
 
 
 def test_execute_select(connection: BigQueryConnection) -> None:
