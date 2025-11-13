@@ -51,6 +51,24 @@ def test_init_extra_kwargs() -> None:
     assert BigQueryAdapter(foo=1, bar="baz").connect()
 
 
+def test_init_with_datasets() -> None:
+    adapter = BigQueryAdapter(datasets="dataset1,dataset2,dataset3")
+    conn = adapter.connect()
+    assert conn.datasets == ["dataset1", "dataset2", "dataset3"]
+
+
+def test_init_with_datasets_whitespace() -> None:
+    adapter = BigQueryAdapter(datasets="dataset1, dataset2 , dataset3")
+    conn = adapter.connect()
+    assert conn.datasets == ["dataset1", "dataset2", "dataset3"]
+
+
+def test_init_without_datasets() -> None:
+    adapter = BigQueryAdapter()
+    conn = adapter.connect()
+    assert conn.datasets is None
+
+
 @pytest.fixture
 def connection() -> BigQueryConnection:
     return BigQueryAdapter().connect()
