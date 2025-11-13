@@ -10,6 +10,7 @@ This adapter supports the following options:
 
 - `project`: The ID of the Google Cloud project to run Harlequin in. Defaults to whatever it can infer from the user's environment, i.e. `gcloud config list project`.
 - `location`: The [location](https://cloud.google.com/compute/docs/regions-zones#available) used to run the catalog queries, which [must be region-qualified](https://cloud.google.com/bigquery/docs/information-schema-intro#syntax). Defaults to `US`.
+- `datasets`: A comma-separated list of dataset IDs to include in the data catalog. If not specified, all datasets in the project will be loaded. This can significantly improve startup performance for projects with many datasets.
 
 ## Required permissions
 

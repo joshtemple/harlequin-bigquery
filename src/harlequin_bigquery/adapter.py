@@ -104,11 +104,18 @@ class BigQueryConnection(HarlequinConnection):
         self,
         project: str | None = None,
         location: str | None = None,
+        datasets: str | None = None,
         init_message: str = "",
         **_: Any,
     ) -> None:
         self.location = location or "US"
         self.init_message = init_message
+        # Parse comma-separated datasets into a list
+        self.datasets = (
+            [d.strip() for d in datasets.split(",") if d.strip()]
+            if datasets
+            else None
+        )
         try:
             self.client = bigquery.Client(project=project, location=location)
             self.conn = bigquery.dbapi.Connection(self.client)
@@ -134,6 +141,13 @@ class BigQueryConnection(HarlequinConnection):
         return BigQueryCursor(cursor)
 
     def get_catalog(self) -> Catalog:
+        # Build the WHERE clause for dataset filtering if specified
+        dataset_filter = ""
+        if self.datasets:
+            # Create a comma-separated list of quoted dataset names for SQL IN clause
+            quoted_datasets = ", ".join(f"'{d}'" for d in self.datasets)
+            dataset_filter = f"where datasets.schema_name in ({quoted_datasets})"
+
         query = f"""
             select
                 datasets.schema_name as dataset_id,
@@ -147,6 +161,7 @@ class BigQueryConnection(HarlequinConnection):
             and datasets.schema_name = tables.table_schema
             left join `{self.project}.region-{self.location}.INFORMATION_SCHEMA.COLUMNS` columns
             using (table_catalog, table_schema, table_name)
+            {dataset_filter}
             order by dataset_id, table_id, column_name
         """
         cursor = self.execute(query)
@@ -257,11 +272,18 @@ class BigQueryAdapter(HarlequinAdapter):
     ADAPTER_OPTIONS = BIGQUERY_ADAPTER_OPTIONS  # type: ignore
 
     def __init__(
-        self, project: str | None = None, location: str | None = None, **_: Any
+        self,
+        project: str | None = None,
+        location: str | None = None,
+        datasets: str | None = None,
+        **_: Any,
     ) -> None:
         self.project = project
         self.location = location
+        self.datasets = datasets
 
     def connect(self) -> BigQueryConnection:
-        conn = BigQueryConnection(project=self.project, location=self.location)
+        conn = BigQueryConnection(
+            project=self.project, location=self.location, datasets=self.datasets
+        )
         return conn

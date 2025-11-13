@@ -43,4 +43,14 @@ location = TextOption(
     short_decls=["-l"],
 )
 
-BIGQUERY_ADAPTER_OPTIONS = [project, location]
+datasets = TextOption(
+    name="datasets",
+    description=(
+        "Comma-separated list of dataset IDs to include in the catalog. "
+        "If not specified, all datasets will be loaded. "
+        "Example: --datasets production,staging,dbt_aaron"
+    ),
+    short_decls=["-d"],
+)
+
+BIGQUERY_ADAPTER_OPTIONS = [project, location, datasets]
