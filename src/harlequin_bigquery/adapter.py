@@ -105,6 +105,7 @@ class BigQueryConnection(HarlequinConnection):
         self,
         project: str | None = None,
         location: str | None = None,
+        default_dataset: str | None = None,
         init_message: str = "",
         **_: Any,
     ) -> None:
@@ -112,6 +113,11 @@ class BigQueryConnection(HarlequinConnection):
         self.init_message = init_message
         try:
             self.client = bigquery.Client(project=project, location=location)
+            if default_dataset:
+                dataset_ref = bigquery.DatasetReference(self.client.project, default_dataset)
+                self.client.default_query_job_config = bigquery.QueryJobConfig(
+                    default_dataset=dataset_ref
+                )
             self.conn = bigquery.dbapi.Connection(self.client)
         except Exception as e:
             raise HarlequinConnectionError(
@@ -259,11 +265,18 @@ class BigQueryAdapter(HarlequinAdapter):
     ADAPTER_OPTIONS = BIGQUERY_ADAPTER_OPTIONS  # type: ignore
 
     def __init__(
-        self, project: str | None = None, location: str | None = None, **_: Any
+        self,
+        project: str | None = None,
+        location: str | None = None,
+        default_dataset: str | None = None,
+        **_: Any,
     ) -> None:
         self.project = project
         self.location = location
+        self.default_dataset = default_dataset
 
     def connect(self) -> BigQueryConnection:
-        conn = BigQueryConnection(project=self.project, location=self.location)
+        conn = BigQueryConnection(
+            project=self.project, location=self.location, default_dataset=self.default_dataset
+        )
         return conn
